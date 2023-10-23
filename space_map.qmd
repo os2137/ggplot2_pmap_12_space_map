@@ -1,0 +1,178 @@
+---
+title: "space_map"
+format: html
+editor: visual
+---
+
+## [Access the slides, code, and other materials at the course website](https://datavizm20.classes.andrewheiss.com/content/12-content/)
+
+## [Slides](https://datavizm20.classes.andrewheiss.com/content/12-content/#slides)
+
+## [Download the data and see the polished code](https://datavizm20.classes.andrewheiss.com/example/12-example/) 
+
+## [Youtube playlist](https://www.youtube.com/watch?v=fOpsbd6-PzU&list=PLS6tnpTr39sGd_PCE07nym2Df9120FW1U)
+
+## Loading shapefiles
+
+```{r}
+
+#| message  = FALSE
+#| warning = FALSE
+library(tidyverse)
+library(sf) # to plot shape files as maps
+library(WDI) # to get data from the World Bank
+```
+
+```{r}
+# Download "Admin 0 – Countries" from
+# https://www.naturalearthdata.com/downloads/110m-cultural-vectors/
+world_map <- read_sf("data/ne_110m_admin_0_countries/ne_110m_admin_0_countries.shp")
+
+# Download cb_2018_us_state_20m.zip under "States" from
+# https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html
+us_states <- read_sf("data/cb_2018_us_state_20m/cb_2018_us_state_20m.shp")
+
+# Download cb_2018_us_county_5m.zip under "County" from
+# https://www.census.gov/geographies/mapping-files/time-series/geo/carto-boundary-file.html
+us_counties <- read_sf("data/cb_2018_us_county_5m/cb_2018_us_county_5m.shp")
+
+# Download "Admin 1 – States, Provinces" from
+# https://www.naturalearthdata.com/downloads/10m-cultural-vectors/
+us_states_hires <- read_sf("data/ne_10m_admin_1_states_provinces/ne_10m_admin_1_states_provinces.shp")
+
+# Download "Rivers + lake centerlines" from
+# https://www.naturalearthdata.com/downloads/10m-physical-vectors/
+rivers_global <- read_sf("data/ne_10m_rivers_lake_centerlines/ne_10m_rivers_lake_centerlines.shp")
+
+# Download "Rivers + lake centerlines, North America supplement" from
+# https://www.naturalearthdata.com/downloads/10m-physical-vectors/
+rivers_na <- read_sf("data/ne_10m_rivers_north_america/ne_10m_rivers_north_america.shp")
+
+# Download "Lakes + Reservoirs" from
+# https://www.naturalearthdata.com/downloads/10m-physical-vectors/
+lakes <- read_sf("data/ne_10m_lakes/ne_10m_lakes.shp")
+
+# Download from https://data.georgiaspatial.org/index.asp?body=preview&dataId=41516
+# after creating an account and logging in
+ga_schools <- read_sf(file.path("data", "schools_2009", "DOE Schools 2009.shp"))
+```
+
+## Basic plotting
+
+```{r}
+
+st_crs(map_minus_antarctica)
+map_minus_antarctica <- world_map |> 
+  filter(ISO_A3 != "ATA")
+ggplot() + 
+  geom_sf(data = map_minus_antarctica, fill = 'purple', color = 'white', size = 0.25) +
+  theme_void() +
+  coord_sf(datum = sf::st_crs("+proj=robin"))
+```
+
+```{r}
+ggplot() + 
+  geom_sf(data = world_map |> filter(ISO_A3 == 'IND'), fill = 'orange4', color = 'white', size = 0.25) +
+  theme_void()
+```
+
+## Projections
+
+## Multiple layers with states + counties
+
+```{r}
+
+lower_48 <- us_states |> 
+  filter(!(NAME %in% c('Alaska', 'Hawaii', 'Puerto Rico')))
+
+ggplot()  +
+  geom_sf(data = lower_48) +
+  coord_sf(datum = sf::st_crs(102003))
+```
+
+```{r}
+only_georgia <-  us_states |>filter(NAME == "Georgia") 
+georgia_counties <- us_counties |> filter(STATEFP == 13)## STATEFP == 13 is related to Georgia. 
+atlanta_counties <- georgia_counties |> filter(NAME %in% c("Cherokee", "Clayton", "Cobb", "DeKalb", "Douglas", "Fayette", "Fulton", "Gwinnett", "Henry", "Rockdale"))
+    
+
+ggplot() + 
+  geom_sf(data = only_georgia, size = 5) +
+  geom_sf(data = georgia_counties ) 
+```
+
+```{r}
+ggplot() + 
+  geom_sf(data = only_georgia, size = 5) +
+  geom_sf(data = atlanta_counties ) 
+```
+
+## Schools in GA (Georgia)
+
+```{r}
+ga_schools
+```
+
+```{r}
+ga_schools_fixed <- ga_schools |> filter(ID != 22097)
+ggplot() + 
+   geom_sf(data = only_georgia) +
+  geom_sf(data = georgia_counties) + 
+  geom_sf(data = ga_schools_fixed, size = 0.5, alpha = 0.5, aes(color = TOTAL)) +
+  scale_colour_viridis_c() +
+  theme_void()
+```
+
+## Mapping your own points
+
+```{r}
+ggplot() + 
+  geom_sf(data = only_georgia, size = 5) +
+  geom_sf(data = atlanta_counties ) 
+
+# lets search up for lat and long using goodmap, go the place and right click and see whats here which includes latitute and longitude informaiton 
+
+ga_cities <- tribble(
+  ~city, ~lat, ~long,
+  "Atlanta", 33.748955, -84.388099,
+  "Athens", 33.950794, -83.358884,
+  "Savannah", 32.113192, -81.089350
+) |> 
+  st_as_sf(coords=  c('long', 'lat'), crs = 4326)
+
+ga_cities
+```
+
+```{r}
+ggplot() + 
+  geom_sf(data = only_georgia, size = 5) +
+  geom_sf(data = atlanta_counties ) + 
+  geom_sf(data = ga_cities) + 
+  geom_sf_label(data = ga_cities, aes(label = city), nudge_y = 0.3)
+```
+
+## Joining data
+
+if you take some data from WDI or from US unemployment rates none of those have geographic data and if we want to plot to a map then we need the geographic/shape file information related to those and then we need to use join
+
+```{r}
+indicators <- c('SP.DYN.LE00.IN') # life expectancy indicator
+wdi_raw <- WDI (country = 'all', indicator = indicators, extra = TRUE, 
+                start = 2015, end = 2015)
+```
+
+```{r}
+wdi_clean <- wdi_raw |> 
+  select(life_expectancy =  SP.DYN.LE00.IN, 
+         iso3c)
+
+world_combined <- map_minus_antarctica |> left_join(wdi_clean, by = join_by(ISO_A3 == iso3c))
+```
+
+```{r}
+ggplot() + 
+  geom_sf(data= world_combined, aes( fill = life_expectancy)) + 
+  scale_fill_viridis_c() + 
+  coord_sf(datum = sf::st_crs(54030)) + 
+  theme_void()
+```
